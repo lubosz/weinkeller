@@ -1,3 +1,51 @@
 #!/usr/bin/python
 
-from weinkeller-lib import commands
+import subprocess, os
+from weinkeller_lib import commands
+import sys
+
+def get_env(bottle_dir):
+    wine_env = os.environ.copy()
+    wine_env["WINEPREFIX"] = bottle_dir
+    return wine_env
+
+def call(command, bottle_dir):
+    subprocess.call(command, shell=True, env=get_env(bottle_dir))
+
+def sandbox(bottle_dir):
+    call("winetricks sandbox", bottle_dir)
+
+def cfg(bottle_dir):
+    call("winecfg", bottle_dir)
+
+def print_usage():
+    print("Usage: weinkeller prefixname command")
+    print("Try: weinkeller help")
+    print("     weinkeller command help")
+
+def print_help():
+    print("Commands: help install launch delete list")
+    sys.exit(0)
+
+def main():
+
+    try:
+        prefix_name = sys.argv[1]
+    except IndexError:
+        print_usage()
+
+    if prefix_name == "help":
+        print_help()
+
+    try:
+        command_name = sys.argv[2]
+    except IndexError:
+        print_usage()
+
+    winebottles_dir = "/home/bmonkey/winebottles/"
+    bottle_dir = winebottles_dir + prefix_name
+
+
+
+
+main()
