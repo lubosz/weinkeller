@@ -11,6 +11,11 @@ def get_env(bottle_dir):
     wine_env["WINEARCH"] = "win32"
     return wine_env
 
+def get_env64(bottle_dir):
+    wine_env = os.environ.copy()
+    wine_env["WINEPREFIX"] = bottle_dir
+    wine_env["WINEARCH"] = "win64"
+    return wine_env
 
 def call(command):
     print("calling", command)
@@ -21,6 +26,9 @@ def call_wine(command, bottle_dir):
     print("calling", command)
     subprocess.call(command, shell=True, env=get_env(bottle_dir))
 
+def call_wine64(command, bottle_dir):
+    print("calling", command)
+    subprocess.call(command, shell=True, env=get_env64(bottle_dir))
 
 def sandbox(bottle_dir):
     call_wine("winetricks sandbox", bottle_dir)
@@ -37,7 +45,7 @@ def print_usage():
 
 
 def print_help():
-    print("Commands: install export import launch delete list")
+    print("Commands: install launch delete list kill export import ")
     sys.exit(0)
 
 
@@ -86,6 +94,80 @@ def delete(bottle_dir):
     call(["rm", bottle_dir, "-Rf"])
 
 
+def print_exe_files(files):
+    print("Supply a valid exe number")
+    i = 0
+    for file in files:
+        print(i, file)
+        i += 1
+    sys.exit(0)
+
+
+def launch(bottle_dir, is_64):
+    exe_files = find_files("*.exe", bottle_dir+"/drive_c/") + \
+                find_files("*.bat", bottle_dir+"/drive_c/")
+
+    nice_files = []
+    deletables = []
+
+    black_list = ["drive_c/windows", "iexplore", "Program Files/Mono-"]
+
+    deletable_list = ["installshield", "uninst", "setup", "installer", "unins   "]
+
+    for exe_file in exe_files:
+        is_black = False
+        is_deletable = False
+
+        pretty_name = exe_file.replace(bottle_dir+"/drive_c/", "")
+
+        for black in black_list:
+            if black in exe_file:
+                is_black = True
+
+        if not is_black:
+            for deletable in deletable_list:
+                if deletable in exe_file.lower():
+                    is_deletable = True
+                    deletables.append(pretty_name)
+
+            if not is_deletable:
+                nice_files.append(pretty_name)
+
+    if deletables:
+        print("====")
+        print("Maybe you can delete these files")
+        print("====")
+        for file in deletables:
+            print(file)
+        print("====")
+        print()
+
+    launch_id = 0
+    try:
+        launch_id = int(sys.argv[3])
+    except IndexError:
+        print_exe_files(nice_files)
+    except ValueError:
+        print_exe_files(nice_files)
+
+
+
+
+    try:
+        win_path = nice_files[launch_id].replace("/", "\\")
+
+        bat_prefix = ""
+        if win_path.endswith(".bat"):
+            bat_prefix = "start"
+
+        if is_64:
+            call_wine64("wine %s 'C:\%s'" % (bat_prefix, win_path), bottle_dir)
+        else:
+            call_wine("wine %s 'C:\%s'" % (bat_prefix, win_path), bottle_dir)
+    except IndexError:
+        print_exe_files(nice_files)
+
+
 def install(bottle_dir):
     try:
         file_name = sys.argv[3]
@@ -119,7 +201,6 @@ def install(bottle_dir):
         call_wine(wine_command, bottle_dir)
     elif ".iso" in file_name:
         print("iso file")
-        #call(["sudo", "mount", file_name, "/mnt/cdrom"])
 
         subprocess.call(["sudo umount /mnt/cdrom"], shell=True)
         subprocess.call(["sudo mount " + file_name + " /mnt/cdrom -o loop"], shell=True)
@@ -135,33 +216,41 @@ def install(bottle_dir):
     elif ".bin" in file_name or ".cue" in file_name:
         print("bin/cue unsupported yet")
 
+
 def main():
+    winebottles_dirs = [
+      "/home/bmonkey/winebottles/",
+      "/run/media/bmonkey/Stuff/winebottles/"]
 
     try:
-        prefix_name = sys.argv[1]
+        command_name = sys.argv[1]
     except IndexError:
         print_usage()
 
-    winebottles_dir = "/home/bmonkey/winebottles/"
-
-    if prefix_name == "help":
+    if command_name == "help":
         print_help()
-    elif prefix_name == "unmount":
+    elif command_name == "unmount":
         subprocess.call(["sudo umount /mnt/cdrom"], shell=True)
         sys.exit(0)
-    elif prefix_name == "list":
-        call(["ls", winebottles_dir])
+    elif command_name == "list":
+        for winebottles_dir in winebottles_dirs:
+            call(["ls", winebottles_dir])
         sys.exit(0)
 
-    bottle_dir = winebottles_dir + prefix_name
+    try:
+        prefix_name = sys.argv[2]
+    except IndexError:
+        print_usage()
+
+
+    bottle_dir = winebottles_dirs[0] + prefix_name
+
+    for winebottles_dir in winebottles_dirs:
+        if os.path.exists(winebottles_dir + prefix_name):
+            bottle_dir = winebottles_dir + prefix_name
 
     if not os.path.exists(bottle_dir):
         sandbox(bottle_dir)
-
-    try:
-        command_name = sys.argv[2]
-    except IndexError:
-        print_usage()
 
     if command_name == "install":
         install(bottle_dir)
@@ -169,6 +258,16 @@ def main():
         delete(bottle_dir)
     elif command_name == "patch":
         patch(bottle_dir)
+    elif command_name == "launch":
+        launch(bottle_dir, False)
+    elif command_name == "launch64":
+        launch(bottle_dir, True)
+    elif command_name == "cfg":
+        cfg(bottle_dir)
+    elif command_name == "kill":
+        call_wine("wineserver -k", bottle_dir)
+    else:
+        print("Unknown command", command_name)
 
 try:
     main()
