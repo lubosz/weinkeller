@@ -5,6 +5,10 @@ from weinkeller_lib import commands
 import sys
 import fnmatch
 
+winebottles_dirs = [
+      "/home/bmonkey/winebottles/",
+      "/run/media/bmonkey/Stuff/winebottles/"]
+
 def get_env(bottle_dir):
     wine_env = os.environ.copy()
     wine_env["WINEPREFIX"] = bottle_dir
@@ -112,7 +116,7 @@ def launch(bottle_dir, is_64):
 
     black_list = ["drive_c/windows", "iexplore", "Program Files/Mono-"]
 
-    deletable_list = ["installshield", "uninst", "setup", "installer", "unins   "]
+    deletable_list = ["installshield", "uninst", "setup", "installer", "unins", "vcredist"]
 
     for exe_file in exe_files:
         is_black = False
@@ -217,11 +221,56 @@ def install(bottle_dir):
         print("bin/cue unsupported yet")
 
 
-def main():
-    winebottles_dirs = [
-      "/home/bmonkey/winebottles/",
-      "/run/media/bmonkey/Stuff/winebottles/"]
+def all_bottles():
+    bottles = []
 
+    for winebottles_dir in winebottles_dirs:
+        for prefix in os.listdir(winebottles_dir):
+            if os.path.isdir(os.path.join(winebottles_dir, prefix)):
+                bottles.append(prefix)
+
+    bottles.sort()
+    return bottles
+
+
+def get_bottle_path(bottle):
+    bottle_dir = winebottles_dirs[0] + bottle
+
+    for winebottles_dir in winebottles_dirs:
+        if os.path.exists(winebottles_dir + bottle):
+            bottle_dir = winebottles_dir + bottle
+
+    return bottle_dir
+
+
+def is_sandbox(bottle):
+    users_path = os.path.join(get_bottle_path(bottle), "drive_c/users/")
+
+    sand_box = True
+    if os.path.exists(users_path):
+        for user in os.listdir(users_path):
+            if user != "Public":
+                desktop_path = os.path.join(users_path, user, "Desktop")
+                if os.path.islink(desktop_path):
+                    sand_box = False
+    #else:
+    #    print("\t total sandbox or different user folder")
+
+    sand_box_string = ""
+    if not sand_box:
+        sand_box_string = "no sandbox!"
+
+    print(bottle, sand_box_string)
+
+    return sand_box
+
+
+def check_sandboxes():
+    for bottle in all_bottles():
+        is_sandbox(bottle)
+
+
+def main():
     try:
         command_name = sys.argv[1]
     except IndexError:
@@ -231,6 +280,9 @@ def main():
         print_help()
     elif command_name == "unmount":
         subprocess.call(["sudo umount /mnt/cdrom"], shell=True)
+        sys.exit(0)
+    elif command_name == "check-sandboxes":
+        check_sandboxes()
         sys.exit(0)
     elif command_name == "list":
         for winebottles_dir in winebottles_dirs:
@@ -242,14 +294,12 @@ def main():
     except IndexError:
         print_usage()
 
-
-    bottle_dir = winebottles_dirs[0] + prefix_name
-
-    for winebottles_dir in winebottles_dirs:
-        if os.path.exists(winebottles_dir + prefix_name):
-            bottle_dir = winebottles_dir + prefix_name
+    bottle_dir = get_bottle_path(prefix_name)
 
     if not os.path.exists(bottle_dir):
+        sandbox(bottle_dir)
+
+    if not is_sandbox(prefix_name):
         sandbox(bottle_dir)
 
     if command_name == "install":
